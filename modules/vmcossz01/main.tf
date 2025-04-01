@@ -12,7 +12,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   node_name  = "proxmox"
 
   clone {
-    vm_id = 995
+    vm_id = 999
     full  = true
   }
 
@@ -34,7 +34,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
 
   disk {
     interface    = "scsi0"
-    size         = 25
+    size         = 20
     datastore_id = "Samsung980"
   }
 
@@ -52,14 +52,14 @@ resource "proxmox_virtual_environment_vm" "vm" {
     type     = "ssh"
     user     = "szkolenie"
     password = "szkolenie"
-    host     = "192.168.50.21"
+    host     = "192.168.20.1"
     port     = 22
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo sed -i 's/^#Port .*/Port 60521/' /etc/ssh/sshd_config",
-      "sudo sed -i 's/^Port .*/Port 60521/' /etc/ssh/sshd_config",
+      "sudo sed -i 's/^#Port .*/Port 60201/' /etc/ssh/sshd_config",
+      "sudo sed -i 's/^Port .*/Port 60201/' /etc/ssh/sshd_config",
       "sudo systemctl stop sshd.socket || true",
       "sudo systemctl disable sshd.socket || true",
       "sudo systemctl daemon-reexec",
