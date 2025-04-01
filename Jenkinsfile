@@ -52,18 +52,18 @@ pipeline {
                         for (machine in machines) {
                             echo "=== ${params.ACTION.toUpperCase()} dla maszyny ${machine} ==="
                             if (params.ACTION == 'apply') {
-                                sh "terraform apply -auto-approve -target=proxmox_vm_qemu.${machine}"
+                                sh "terraform apply -auto-approve -target=module.${machine}"
                             } else if (params.ACTION == 'destroy') {
-                                sh "terraform destroy -auto-approve -target=proxmox_vm_qemu.${machine}"
+                                sh "terraform destroy -auto-approve -target=module.${machine}"
                             }
                             sleep(time: 15, unit: 'SECONDS')
                         }
                     } else {
                         echo "=== ${params.ACTION.toUpperCase()} dla maszyny ${params.VM_NAME} ==="
                         if (params.ACTION == 'apply') {
-                            sh "terraform apply -auto-approve -target=proxmox_vm_qemu.${params.VM_NAME}"
+                            sh "terraform apply -auto-approve -target=module.${params.VM_NAME}"
                         } else if (params.ACTION == 'destroy') {
-                            sh "terraform destroy -auto-approve -target=proxmox_vm_qemu.${params.VM_NAME}"
+                            sh "terraform destroy -auto-approve -target=module.${params.VM_NAME}"
                         }
                     }
                 }
