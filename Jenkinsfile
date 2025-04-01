@@ -13,6 +13,13 @@ pipeline {
         TF_VAR_proxmox_api_token = credentials('proxmox_api_token')
     }
     stages {
+
+        stage('Clean Workspace') {
+            steps {
+                deleteDir() // <--- czyści workspace
+            }
+        }
+
         stage('Checkout') {
             steps {
                 git branch: 'main', credentialsId: 'github', url: 'git@github.com:Sebastian-Koziatek/jenkins-zabbix-agent.git'
