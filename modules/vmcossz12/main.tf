@@ -50,7 +50,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
 
   connection {
     type     = "ssh"
-    user     = "szkolenie"
+    user     = "root"
     password = "szkolenie"
     host     = "192.168.20.12"
     port     = 22
