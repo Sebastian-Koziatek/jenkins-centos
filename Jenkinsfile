@@ -36,10 +36,11 @@ pipeline {
                 script {
                     def expandedNumbers = []
 
-                    // Rozwijanie zakresów np. 2-4
                     params.VM_NUMBERS.tokenize(',').each { part ->
                         if (part.contains('-')) {
-                            def (start, end) = part.split('-')*.toInteger()
+                            def parts = part.split('-')
+                            def start = parts[0].toInteger()
+                            def end = parts[1].toInteger()
                             expandedNumbers += (start..end)
                         } else {
                             expandedNumbers << part.toInteger()
