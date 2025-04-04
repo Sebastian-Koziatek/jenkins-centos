@@ -1,17 +1,15 @@
 pipeline {
     agent any
+
     parameters {
         choice(name: 'ACTION', choices: ['apply', 'destroy'], description: 'Wybierz akcję Terraform')
-        choice(name: 'VM_NAME', choices: [
-            'vmcossz01', 'vmcossz02', 'vmcossz03', 'vmcossz04',
-            'vmcossz05', 'vmcossz06', 'vmcossz07', 'vmcossz08',
-            'vmcossz09', 'vmcossz10', 'vmcossz11', 'vmcossz12',
-            'vmcossz13', 'vmcossz14', 'vmcossz15', 'ALL'
-        ], description: 'Wybierz maszynę do operacji')
+        string(name: 'VM_NUMBERS', defaultValue: '1,2,3', description: 'Podaj numery maszyn oddzielone przecinkami lub zakresy, np. "1,3,5" albo "2-4,6"')
     }
+
     environment {
         TF_VAR_proxmox_api_token = credentials('proxmox_api_token')
     }
+
     stages {
         stage('Restore Terraform State') {
             steps {
@@ -36,29 +34,30 @@ pipeline {
         stage('Terraform Apply or Destroy') {
             steps {
                 script {
-                    def machines = [
-                        'vmcossz01', 'vmcossz02', 'vmcossz03', 'vmcossz04',
-                        'vmcossz05', 'vmcossz06', 'vmcossz07', 'vmcossz08',
-                        'vmcossz09', 'vmcossz10', 'vmcossz11', 'vmcossz12',
-                        'vmcossz13', 'vmcossz14', 'vmcossz15'
-                    ]
-                    if (params.VM_NAME == 'ALL') {
-                        for (machine in machines) {
-                            echo "=== ${params.ACTION.toUpperCase()} dla maszyny ${machine} ==="
-                            if (params.ACTION == 'apply') {
-                                sh "terraform apply -auto-approve -target=module.${machine}"
-                            } else if (params.ACTION == 'destroy') {
-                                sh "terraform destroy -auto-approve -target=module.${machine}"
-                            }
-                            sleep(time: 15, unit: 'SECONDS')
+                    def expandedNumbers = []
+
+                    // Rozwijanie zakresów np. 2-4
+                    params.VM_NUMBERS.tokenize(',').each { part ->
+                        if (part.contains('-')) {
+                            def (start, end) = part.split('-')*.toInteger()
+                            expandedNumbers += (start..end)
+                        } else {
+                            expandedNumbers << part.toInteger()
                         }
-                    } else {
-                        echo "=== ${params.ACTION.toUpperCase()} dla maszyny ${params.VM_NAME} ==="
+                    }
+
+                    def machines = expandedNumbers.collect { num ->
+                        return String.format("vmcossz%02d", num)
+                    }
+
+                    for (machine in machines) {
+                        echo "=== ${params.ACTION.toUpperCase()} dla maszyny ${machine} ==="
                         if (params.ACTION == 'apply') {
-                            sh "terraform apply -auto-approve -target=module.${params.VM_NAME}"
+                            sh "terraform apply -auto-approve -target=module.${machine}"
                         } else if (params.ACTION == 'destroy') {
-                            sh "terraform destroy -auto-approve -target=module.${params.VM_NAME}"
+                            sh "terraform destroy -auto-approve -target=module.${machine}"
                         }
+                        sleep(time: 5, unit: 'SECONDS')
                     }
                 }
             }
