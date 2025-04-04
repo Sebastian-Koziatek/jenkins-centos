@@ -56,16 +56,13 @@ resource "proxmox_virtual_environment_vm" "vm" {
     port     = 22
   }
 
-  provisioner "remote-exec" {
-    inline = [
-      "sudo sed -i 's/^#Port .*/Port 60203/' /etc/ssh/sshd_config",
-      "sudo sed -i 's/^Port .*/Port 60203/' /etc/ssh/sshd_config",
-      "sudo systemctl stop sshd.socket || true",
-      "sudo systemctl disable sshd.socket || true",
-      "sudo systemctl daemon-reexec",
-      "sudo systemctl daemon-reload",
-      "sudo systemctl restart ssh",
-    ]
+provisioner "remote-exec" {
+  inline = [
+    "sudo sed -i -E 's/^#?Port .*/Port 60201/' /etc/ssh/sshd_config",
+    "sudo systemctl daemon-reload",
+    "sudo systemctl restart sshd",
+    "sudo systemctl enable sshd"
+  ]
   }
 }
 
