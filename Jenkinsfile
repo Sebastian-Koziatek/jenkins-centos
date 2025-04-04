@@ -3,7 +3,7 @@ pipeline {
 
     parameters {
         choice(name: 'ACTION', choices: ['apply', 'destroy'], description: 'Wybierz akcję Terraform')
-        string(name: 'VM_NUMBERS', defaultValue: '1,2,3', description: 'Podaj numery maszyn oddzielone przecinkami lub zakresy, np. "1,3,5" albo "2-4,6"')
+        string(name: 'VM_NUMBERS', defaultValue: '1', description: 'Podaj numery maszyn oddzielone przecinkami lub zakresy, np. "1,3,5" albo "2-4,6"')
     }
 
     environment {
