@@ -32,16 +32,10 @@ pipeline {
       }
     }
 
-    stage('Terraform Plan') {
-      steps {
-        sh 'terraform plan -out=tfplan'
-      }
-    }
-
-    stage('Terraform Apply/Destroy') {
+    stage('Per-Module Plan & Apply/Destroy') {
       steps {
         script {
-          // Parsowanie VM_NUMBERS
+          // 1) Rozbijamy VM_NUMBERS na listę liczb
           def nums = []
           params.VM_NUMBERS.tokenize(',').each { part ->
             if (part.contains('-')) {
@@ -52,20 +46,35 @@ pipeline {
             }
           }
 
-          // Generacja nazw modułów CentOS
+          // 2) Generujemy nazwy modułów CentOS
           def modules = nums.collect { n ->
             String.format("vmcentossz%02d", n)
           }
 
-          if (params.ACTION == 'apply') {
-            // pełne apply – tworzy wszystko, co brakujące
-            sh 'terraform apply -auto-approve tfplan'
-          } else {
-            // destroy tylko wskazanych modułów
-            modules.each { m ->
-              echo "=== DESTROY modułu ${m} ==="
-              sh "terraform destroy -auto-approve -target=module.${m}"
+          // 3) Dla każdego modułu robimy plan + apply lub destroy
+          modules.each { m ->
+            echo ">>> ${params.ACTION.toUpperCase()} dla modułu ${m}"
+            if (params.ACTION == 'apply') {
+              sh """
+                terraform plan \
+                  -target=module.${m} \
+                  -out=tfplan-${m}
+
+                terraform apply \
+                  -auto-approve tfplan-${m}
+              """
+            } else {
+              sh """
+                terraform plan \
+                  -destroy \
+                  -target=module.${m} \
+                  -out=tfplan-d-${m}
+
+                terraform apply \
+                  -auto-approve tfplan-d-${m}
+              """
             }
+            sleep 5
           }
         }
       }
@@ -74,7 +83,7 @@ pipeline {
 
   post {
     always {
-      archiveArtifacts artifacts: 'tfplan', allowEmptyArchive: true
+      archiveArtifacts artifacts: 'tfplan-*', allowEmptyArchive: true
     }
   }
 }
