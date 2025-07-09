@@ -29,7 +29,7 @@ pipeline {
                         sh "cp \"${RHEL_STATE_FILE}\" terraform.tfstate"
                         echo "Przywrócono stan RHEL z ${RHEL_STATE_FILE}"
                     } else {
-                        echo "Brak zapisanego stanu RHEL, rozpoczynamy z pustym stanem."  
+                        echo "Brak zapisanego stanu RHEL, rozpoczynamy z pustym stanem."
                     }
                 }
             }
@@ -44,7 +44,7 @@ pipeline {
         stage('Terraform Apply/Destroy') {
             steps {
                 script {
-                    // Funkcja do parsowania parametrów VM_NUMBERS
+                    // Parsowanie listy numerów VM (np. "1,3-5")
                     def parseList = { str ->
                         def result = []
                         str.split(',').each { part ->
@@ -57,18 +57,17 @@ pipeline {
                         }
                         return result
                     }
-
                     def vms = parseList(params.VM_NUMBERS)
 
                     if (params.ACTION == 'apply') {
-                        // Apply dla wszystkich wskazanych maszyn
+                        // Apply dla wszystkich wskazanych maszyn (tworzy moduł)
                         vms.each { num ->
                             sh "terraform apply -auto-approve -target=module.vmrhelsz${num}"
                         }
                     } else {
-                        // Destroy tylko dla wskazanych maszyn
+                        // Destroy tylko zasób VM wewnątrz modułu
                         vms.each { num ->
-                            echo "=== DESTROY dla modułu vmrhelsz${num} ==="
+                            echo "=== DESTROY dla vmrhelsz${num} ==="
                             sh "terraform destroy -auto-approve -target=module.vmrhelsz${num}.proxmox_virtual_environment_vm.vm"
                         }
                     }
