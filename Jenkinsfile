@@ -2,28 +2,40 @@ pipeline {
   agent any
 
   environment {
-    // Zakładam, że trzymasz token Proxmox w Jenkinsie pod nazwą "proxmox-token"
-    TF_VAR_proxmox_api_token = credentials('proxmox-token')
+    // jeżeli masz inne TF_VAR_, dopisz je tutaj
+    TF_LOG = "ERROR"
   }
 
   stages {
     stage('Checkout SCM') {
       steps {
-        checkout scm
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: '*/main']],
+          userRemoteConfigs: [[
+            url: 'git@github.com:Sebastian-Koziatek/jenkins-centos.git',
+            credentialsId: 'jenkins'
+          ]]
+        ])
+      }
+    }
+
+    stage('Set Proxmox Credentials') {
+      steps {
+        withCredentials([string(credentialsId: 'proxmox-token', variable: 'TF_VAR_proxmox_api_token')]) {
+          sh 'echo "Proxmox token loaded."'
+        }
       }
     }
 
     stage('Restore Terraform State') {
       steps {
-        // Przywróć stan z workspace/state
-        sh '''
-          if [ -f state/terraform.tfstate ]; then
-            cp state/terraform.tfstate .
-            echo "Stan Terraform został przywrócony."
-          else
-            echo "Brak pliku stanu — zaczynamy od zera."
-          fi
-        '''
+        script {
+          if (fileExists('state/terraform.tfstate')) {
+            sh 'cp state/terraform.tfstate .'
+            echo 'Stan Terraform został przywrócony'
+          }
+        }
       }
     }
 
@@ -33,11 +45,15 @@ pipeline {
       }
     }
 
+    stage('Terraform Plan') {
+      steps {
+        sh 'terraform plan -out=tfplan'
+      }
+    }
+
     stage('Terraform Apply') {
       steps {
-        // Usuwamy -target, aby Terraform wykonał pełne apply wszystkich modułów
-        echo '=== APPLY wszystkich modułów Terraform ==='
-        sh 'terraform apply -auto-approve'
+        sh 'terraform apply -auto-approve tfplan'
       }
     }
 
@@ -46,13 +62,9 @@ pipeline {
         sh '''
           mkdir -p state
           cp terraform.tfstate state/
-          echo "Stan Terraform został zapisany."
         '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'state/terraform.tfstate', fingerprint: true
-        }
+        archiveArtifacts artifacts: 'state/terraform.tfstate', fingerprint: true
+        echo 'Stan Terraform został zapisany'
       }
     }
   }
