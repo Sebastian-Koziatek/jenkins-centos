@@ -1,74 +1,80 @@
 pipeline {
-    agent any
+  agent any
 
-    parameters {
-        choice(name: 'ACTION', choices: ['apply', 'destroy'], description: 'Wybierz akcję Terraform')
-        string(name: 'VM_NUMBERS', defaultValue: '1', description: 'Numery maszyn, np. "1,3" lub "2-4"')
+  parameters {
+    choice(name: 'ACTION', choices: ['apply', 'destroy'], description: 'apply = tworzenie/aktualizacja, destroy = usunięcie')
+    string(name: 'VM_NUMBERS', defaultValue: '1', description: 'Numery maszyn, np. "1,3" lub "2-4"')
+  }
+
+  environment {
+    TF_VAR_proxmox_api_token = credentials('proxmox_api_token')
+    TF_BACKEND_BUCKET        = 'moja-terraform-states'
+    TF_BACKEND_KEY           = 'centos/terraform.tfstate'
+    TF_BACKEND_REGION        = 'eu-central-1'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
     }
 
-    environment {
-        TF_VAR_proxmox_api_token = credentials('proxmox_api_token')
-        CENTOS_STATE_DIR        = "${env.WORKSPACE}/state/centos"
-        CENTOS_STATE_FILE       = "${CENTOS_STATE_DIR}/terraform.tfstate"
+    stage('Terraform Init') {
+      steps {
+        sh """
+          terraform init \
+            -backend-config="bucket=${TF_BACKEND_BUCKET}" \
+            -backend-config="key=${TF_BACKEND_KEY}" \
+            -backend-config="region=${TF_BACKEND_REGION}" \
+            -reconfigure
+        """
+      }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Ensure State Dir') {
-            steps {
-                // tworzymy katalog, jeśli nie istnieje
-                sh "mkdir -p \"${CENTOS_STATE_DIR}\""
-            }
-        }
-
-        stage('Terraform Init') {
-            steps {
-                // inicjalizujemy lokalny backend wskazujący na state/centos/terraform.tfstate
-                sh """
-                  terraform init -reconfigure \
-                    -backend-config="path=${CENTOS_STATE_FILE}"
-                """
-            }
-        }
-
-        stage('Terraform Plan & Apply/Destroy') {
-            steps {
-                script {
-                    // parsowanie zakresów VM_NUMBERS
-                    def nums = []
-                    params.VM_NUMBERS.tokenize(',').each { part ->
-                        if (part.contains('-')) {
-                            def (from, to) = part.split('-').collect { it.toInteger() }
-                            nums += (from..to)
-                        } else {
-                            nums << part.toInteger()
-                        }
-                    }
-
-                    // generacja nazw modułów CentOS
-                    def modules = nums.collect { n ->
-                        String.format("vmcentossz%02d", n)
-                    }
-
-                    // wykonanie apply/destroy
-                    modules.each { m ->
-                        echo "=== ${params.ACTION.toUpperCase()} modułu ${m} ==="
-                        sh "terraform ${params.ACTION} -auto-approve -target=module.${m}"
-                        sleep 5
-                    }
-                }
-            }
-        }
+    stage('Terraform Plan') {
+      steps {
+        sh 'terraform plan -out=tfplan'
+      }
     }
 
-    post {
-        always {
-            archiveArtifacts artifacts: "state/centos/terraform.tfstate", allowEmptyArchive: true
+    stage('Terraform Apply/Destroy') {
+      steps {
+        script {
+          // Parsowanie VM_NUMBERS
+          def nums = []
+          params.VM_NUMBERS.tokenize(',').each { part ->
+            if (part.contains('-')) {
+              def (from, to) = part.split('-').collect { it.toInteger() }
+              nums += (from..to)
+            } else {
+              nums << part.toInteger()
+            }
+          }
+
+          // Generacja nazw modułów CentOS
+          def modules = nums.collect { n ->
+            String.format("vmcentossz%02d", n)
+          }
+
+          if (params.ACTION == 'apply') {
+            // pełne apply – tworzy wszystko, co brakujące
+            sh 'terraform apply -auto-approve tfplan'
+          } else {
+            // destroy tylko wskazanych modułów
+            modules.each { m ->
+              echo "=== DESTROY modułu ${m} ==="
+              sh "terraform destroy -auto-approve -target=module.${m}"
+            }
+          }
         }
+      }
     }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'tfplan', allowEmptyArchive: true
+    }
+  }
 }
