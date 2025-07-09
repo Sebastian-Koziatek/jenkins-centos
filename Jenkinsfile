@@ -7,19 +7,23 @@ pipeline {
     }
 
     environment {
+        // Token Proxmox przekazywany do Terraform jako TF_VAR_proxmox_api_token
         TF_VAR_proxmox_api_token = credentials('proxmox_api_token')
+        // Ścieżka do oddzielnego katalogu stanu dla CentOS
+        CENTOS_STATE_DIR  = "${env.WORKSPACE}/state/centos"
+        CENTOS_STATE_FILE = "${CENTOS_STATE_DIR}/terraform.tfstate"
     }
 
     stages {
         stage('Restore Terraform State') {
             steps {
                 script {
-                    def statePath = "${env.WORKSPACE}/state/terraform.tfstate"
-                    if (fileExists(statePath)) {
-                        sh "cp \"${statePath}\" ."
-                        echo "Stan Terraform został przywrócony z ${statePath}"
+                    if (fileExists(CENTOS_STATE_FILE)) {
+                        // Przywracamy poprzedni stan CentOS
+                        sh "cp \"${CENTOS_STATE_FILE}\" ./terraform.tfstate"
+                        echo "Przywrócono stan CentOS z ${CENTOS_STATE_FILE}"
                     } else {
-                        echo "Brak zapisanego terraform.tfstate – start od zera."
+                        echo "Brak zapisanego stanu CentOS – rozpoczęcie od zera."
                     }
                 }
             }
@@ -27,6 +31,7 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
+                // Inicjalizacja Terraform; -reconfigure wymusza ponowne odczytanie backendu
                 sh "terraform init -reconfigure"
             }
         }
@@ -34,31 +39,27 @@ pipeline {
         stage('Terraform Apply or Destroy') {
             steps {
                 script {
-                    def expandedNumbers = []
-
+                    // Rozbijamy parametr VM_NUMBERS na listę pojedynczych numerów
+                    def expanded = []
                     params.VM_NUMBERS.tokenize(',').each { part ->
                         if (part.contains('-')) {
-                            def parts = part.split('-')
-                            def start = parts[0].toInteger()
-                            def end = parts[1].toInteger()
-                            expandedNumbers += (start..end)
+                            def (from, to) = part.split('-').collect { it.toInteger() }
+                            expanded += (from..to)
                         } else {
-                            expandedNumbers << part.toInteger()
+                            expanded << part.toInteger()
                         }
                     }
 
-                    def machines = expandedNumbers.collect { num ->
-                        return String.format("vmcossz%02d", num)
+                    // Generujemy nazwy modułów dla CentOS – prefix "vmcentossz"
+                    def machines = expanded.collect { num ->
+                        String.format("vmcentossz%02d", num)
                     }
 
-                    for (machine in machines) {
-                        echo "=== ${params.ACTION.toUpperCase()} dla maszyny ${machine} ==="
-                        if (params.ACTION == 'apply') {
-                            sh "terraform apply -auto-approve -target=module.${machine}"
-                        } else if (params.ACTION == 'destroy') {
-                            sh "terraform destroy -auto-approve -target=module.${machine}"
-                        }
-                        sleep(time: 5, unit: 'SECONDS')
+                    // Wykonujemy apply lub destroy na poszczególnych modułach
+                    machines.each { machine ->
+                        echo "=== ${params.ACTION.toUpperCase()} dla modułu ${machine} ==="
+                        sh "terraform ${params.ACTION} -auto-approve -target=module.${machine}"
+                        sleep time: 5, unit: 'SECONDS'
                     }
                 }
             }
@@ -67,12 +68,13 @@ pipeline {
         stage('Save Terraform State') {
             steps {
                 script {
-                    def savePath = "${env.WORKSPACE}/state"
-                    sh "mkdir -p \"${savePath}\""
+                    // Tworzymy katalog stanu, jeśli nie istnieje
+                    sh "mkdir -p \"${CENTOS_STATE_DIR}\""
                     if (fileExists('terraform.tfstate')) {
-                        sh "cp terraform.tfstate \"${savePath}/\""
-                        archiveArtifacts artifacts: 'state/terraform.tfstate', fingerprint: true
-                        echo "Stan Terraform został zapisany do ${savePath}"
+                        // Zapisujemy nowy stan do oddzielnego katalogu CentOS
+                        sh "cp terraform.tfstate \"${CENTOS_STATE_FILE}\""
+                        archiveArtifacts artifacts: "state/centos/terraform.tfstate", fingerprint: true
+                        echo "Zapisano stan CentOS do ${CENTOS_STATE_FILE}"
                     } else {
                         echo "Brak terraform.tfstate do zapisania."
                     }
