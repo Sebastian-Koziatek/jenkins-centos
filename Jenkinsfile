@@ -27,7 +27,8 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                sh "terraform init -reconfigure"
+                echo "Inicjalizacja Terraform z migracją backendu..."
+                sh "terraform init -reconfigure -migrate-state"
             }
         }
 
