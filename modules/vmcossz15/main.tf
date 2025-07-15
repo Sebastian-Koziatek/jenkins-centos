@@ -35,7 +35,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   disk {
     interface    = "scsi0"
     size         = 20
-    datastore_id = "Samsung980"
+    datastore_id = "Samsung980ZFS"
   }
 
   operating_system {
