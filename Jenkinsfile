@@ -28,7 +28,7 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 echo "Inicjalizacja Terraform z migracją backendu..."
-                sh "terraform init -migrate-state"
+                sh "terraform init -migrate-state -input=false"
             }
         }
 
